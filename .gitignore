@@ -1,5 +1,6 @@
 samples/
 train_results/
+deepdanbooru.bin
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

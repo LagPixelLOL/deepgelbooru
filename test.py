@@ -10,23 +10,18 @@ with torch.device("meta"):
     model = deep_danbooru_model.DeepDanbooruModel()
 model.load_state_dict(torch.load("deepdanbooru.bin", "cuda", weights_only=False), assign=True, strict=True)
 
-pic = Image.open("test.png").convert("RGB").resize((512, 512))
+pic = Image.open("test.jpg").convert("RGB").resize((512, 512))
 x = torchvision.transforms.functional.pil_to_tensor(pic).to("cuda", torch.bfloat16).permute(1, 2, 0).unsqueeze(0) / 255
 
 r = model(x)
 y = r[0]
 
-tags = []
-for i, p in enumerate(y):
-    p = float(p)
-    if p >= 0.5:
-        tag = model.tags[i]
-        if tag.startswith("rating"):
-            continue
-        tag = tag.replace("_", " ")
-        tags.append(tag)
-        print(tag, p)
-tags_text = ", ".join(tags)
-
-with open("result.txt", "w", encoding="utf8") as file:
-    file.write(tags_text)
+first = True
+for i, prob in enumerate(y):
+    if prob >= 0.5:
+        if first:
+            first = False
+        else:
+            print(", ", end="", flush=True)
+        print(model.tags[i].replace("_", " "), end="", flush=True)
+print()

@@ -45,10 +45,9 @@ class DeepDanbooruDataset(Dataset):
             tag = tag.strip()
             if tag:
                 tag = tag.replace(" ", "_")
-                if tag == "sfw":
-                    tag = "rating:safe"
-                elif tag == "nsfw":
-                    tag = "rating:explicit"
+                if tag == "nsfw": tag = "rating:explicit"
+                elif tag == "qfw": tag = "rating:questionable"
+                elif tag == "sfw": tag = "rating:safe"
                 labels.append(tag)
 
         label_tensor = torch.zeros(1, len(model.tags), dtype=TORCH_DTYPE)
@@ -84,7 +83,7 @@ with torch.device("meta"):
 if model_sd is None:
     model.load_state_dict(torch.load("deepdanbooru.bin", device, weights_only=False), assign=True, strict=True)
 else:
-    print(f"Found previous unfinished training at epoch {highest_epoch}, resuming...")
+    print(f"Found previous training at epoch {highest_epoch}, resuming...")
     model.load_state_dict(model_sd, assign=True, strict=True)
 model.to(device, TORCH_DTYPE)
 
@@ -95,16 +94,20 @@ train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True
 eval_dataloader = DataLoader(eval_dataset, batch_size=batch_size, shuffle=True, num_workers=os.cpu_count(), generator=torch.Generator().manual_seed(42))
 
 criterion = nn.BCELoss()
-optimizer = optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-5)
+learning_rate = 1e-4
+optimizer = optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=1e-5)
 if optim_sd:
-    print("Found previous unfinished training optimizer state too, resuming...")
+    print("Found previous training optimizer state too, resuming...")
     optimizer.load_state_dict(optim_sd)
+for group in optimizer.param_groups:
+    group["lr"] = learning_rate
 scheduler = optim.lr_scheduler.ConstantLR(optimizer, factor=1)
 
 del model_sd, optim_sd
 
 @torch.no_grad
 def test():
+    model.eval()
     torch.cuda.empty_cache()
     if not os.path.isdir("samples"):
         return
@@ -157,8 +160,8 @@ print(f"Number of parameters: {sum(p.numel() for p in model.parameters())}")
 num_epochs = 69
 
 def main():
-    evaluate()
     test()
+    evaluate()
     for epoch in range(highest_epoch, num_epochs):
         model.train()
         torch.cuda.empty_cache()
@@ -191,7 +194,7 @@ def main():
 
         epoch_acc = running_correct_labels / running_sample_labels
         epoch_loss = running_loss / step_count
-        print(f"Epoch [{epoch + 1}/{num_epochs}], Loss: {epoch_loss:.5g}, Accuracy: {epoch_acc:.5g}")
+        print(f"Finished epoch [{epoch + 1}/{num_epochs}], Loss: {epoch_loss:.5g}, Accuracy: {epoch_acc:.5g}")
 
         print("Saving model and optimizer states...")
         os.makedirs("train_results", exist_ok=True)
@@ -199,8 +202,8 @@ def main():
         torch.save(optimizer.state_dict(), os.path.join("train_results", f"optim_epoch_{epoch + 1}.bin"))
         print("Saved.")
 
-        evaluate()
         test()
+        evaluate()
 
 if __name__ == "__main__":
     main()
