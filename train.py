@@ -18,18 +18,8 @@ def get_image_tensor(image_path, use_cuda=True):
 
 class DeepDanbooruDataset(Dataset):
 
-    def __init__(self, images_dir):
-        self.data = []
-        for path in sorted(os.listdir(images_dir)):
-            if path.endswith(".txt"):
-                continue
-            path = os.path.join(images_dir, path)
-            if not os.path.isfile(path):
-                continue
-            tags_path = os.path.splitext(path)[0] + ".txt"
-            if not os.path.isfile(tags_path):
-                continue
-            self.data.append((path, tags_path))
+    def __init__(self, image_tag_path_tuple_list):
+        self.data = image_tag_path_tuple_list
         self.label_mapping = {label: index for index, label in enumerate(model.tags)}
 
     def __len__(self):
@@ -84,20 +74,42 @@ else:
     model_sd = "deepdanbooru.bin"
 model = deep_danbooru_model.DeepDanbooruModel.from_single_file(model_sd, device, TORCH_DTYPE)
 
+def train_test_sets(dataset_dir):
+    train_set = []
+    test_set = []
+    for path in sorted(os.listdir(dataset_dir)):
+        if path.endswith(".txt"):
+            continue
+        image_id = int(os.path.splitext(path)[0])
+        path = os.path.join(dataset_dir, path)
+        if not os.path.isfile(path):
+            continue
+        tags_path = os.path.splitext(path)[0] + ".txt"
+        if not os.path.isfile(tags_path):
+            continue
+        if image_id % 100 < 99:
+            train_set.append((path, tags_path))
+        else:
+            test_set.append((path, tags_path))
+    return DeepDanbooruDataset(train_set), DeepDanbooruDataset(test_set)
+
 batch_size = 128
-dataset = DeepDanbooruDataset("/root/anime-collection/images")
-train_dataset, eval_dataset = random_split(dataset, [0.99, 0.01], generator=torch.Generator().manual_seed(42))
+train_dataset, eval_dataset = train_test_sets("/root/anime-collection/images")
+print(f"Train size: {len(train_dataset)}\nTest size: {len(eval_dataset)}")
 train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=os.cpu_count(), generator=torch.Generator().manual_seed(42))
 eval_dataloader = DataLoader(eval_dataset, batch_size=batch_size, shuffle=True, num_workers=os.cpu_count(), generator=torch.Generator().manual_seed(42))
 
+learning_rate = 5e-5
+weight_decay = 1e-3
+
 criterion = nn.BCELoss()
-learning_rate = 1e-4
-optimizer = optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=1e-5)
-if optim_sd:
+optimizer = optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
+if optim_sd is not None:
     print("Found previous training optimizer state too, resuming...")
     optimizer.load_state_dict(optim_sd)
 for group in optimizer.param_groups:
     group["lr"] = learning_rate
+    group["weight_decay"] = weight_decay
 scheduler = optim.lr_scheduler.ConstantLR(optimizer, factor=1)
 
 del model_sd, optim_sd
