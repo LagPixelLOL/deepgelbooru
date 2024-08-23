@@ -6,12 +6,12 @@ from PIL import Image
 
 torch.set_grad_enabled(False)
 
-with torch.device("meta"):
-    model = deep_danbooru_model.DeepDanbooruModel()
-model.load_state_dict(torch.load("deepdanbooru.bin", "cuda", weights_only=False), assign=True, strict=True)
+TORCH_DTYPE = torch.bfloat16
+
+model = deep_danbooru_model.DeepDanbooruModel.from_single_file("deepdanbooru.bin", "cuda", TORCH_DTYPE)
 
 pic = Image.open("test.jpg").convert("RGB").resize((512, 512))
-x = torchvision.transforms.functional.pil_to_tensor(pic).to("cuda", torch.bfloat16).permute(1, 2, 0).unsqueeze(0) / 255
+x = torchvision.transforms.functional.pil_to_tensor(pic).to("cuda", TORCH_DTYPE).permute(1, 2, 0).unsqueeze(0) / 255
 
 r = model(x)
 y = r[0]

@@ -4,8 +4,12 @@ import torch.nn.functional as F
 
 class DeepDanbooruModel(nn.Module):
 
-    def __init__(self):
+    def __init__(self, num_tags):
         super().__init__()
+
+        self.num_tags = int(num_tags)
+        if self.num_tags <= 0:
+            raise ValueError("Number of tags can't be 0!")
 
         self.tags = []
 
@@ -188,7 +192,7 @@ class DeepDanbooruModel(nn.Module):
         self.n_Conv_175 = nn.Conv2d(kernel_size=(1, 1), in_channels=4096, out_channels=1024)
         self.n_Conv_176 = nn.Conv2d(kernel_size=(3, 3), in_channels=1024, out_channels=1024)
         self.n_Conv_177 = nn.Conv2d(kernel_size=(1, 1), in_channels=1024, out_channels=4096)
-        self.n_Conv_178 = nn.Conv2d(kernel_size=(1, 1), in_channels=4096, out_channels=9176, bias=False)
+        self.n_Conv_178 = nn.Conv2d(kernel_size=(1, 1), in_channels=4096, out_channels=self.num_tags, bias=False)
 
     def forward(self, *inputs):
         t_358, = inputs
@@ -668,10 +672,32 @@ class DeepDanbooruModel(nn.Module):
         return t_771
 
     def load_state_dict(self, state_dict, **kwargs):
-        self.tags = state_dict.pop("tags", [])
+        self.tags = state_dict.pop("tags", None)
+        if self.tags is None:
+            raise ValueError("There's no \"tags\" key in the state dict!")
+        tag_count = len(self.tags)
+        if tag_count != self.num_tags:
+            raise ValueError(f"You are loading a state dict with different tag count than the set config(Config: {self.num_tags} != State dict: {tag_count})!")
         super().load_state_dict(state_dict, **kwargs)
 
     def state_dict(self, **kwargs):
-        sd = super().state_dict(**kwargs)
-        sd["tags"] = self.tags
-        return sd
+        state_dict = super().state_dict(**kwargs)
+        state_dict["tags"] = self.tags
+        return state_dict
+
+    @classmethod
+    def from_single_file(cls, model_path_or_dict, device_map="cpu", torch_dtype="auto"):
+        if isinstance(model_path_or_dict, dict):
+            state_dict = model_path_or_dict
+        else:
+            state_dict = torch.load(model_path_or_dict, map_location=device_map, weights_only=False)
+        tags = state_dict.get("tags")
+        if tags is None:
+            raise ValueError("There's no \"tags\" key in the state dict!")
+        with torch.device("meta"):
+            model = cls(len(tags))
+        model.load_state_dict(state_dict, assign=True, strict=True)
+        if torch_dtype != "auto":
+            model.to(dtype=torch_dtype)
+        model.to(device=device_map)
+        return model

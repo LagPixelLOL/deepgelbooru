@@ -39,9 +39,7 @@ def parse_args():
 def main():
     args = parse_args()
     print("Loading model...")
-    with torch.device("meta"):
-        model = deep_danbooru_model.DeepDanbooruModel()
-    model.load_state_dict(torch.load("deepdanbooru.bin", "cuda", weights_only=False), assign=True, strict=True)
+    model = deep_danbooru_model.DeepDanbooruModel.from_single_file("deepdanbooru.bin", "cuda", TORCH_DTYPE)
     print("Getting image paths and filtering unneeded images...")
     image_files = []
     for image_file in [os.path.join(args.input, f) for f in os.listdir(args.input) if not f.endswith(".txt")]:

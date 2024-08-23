@@ -78,14 +78,11 @@ def find_last():
 
 model_sd, optim_sd, highest_epoch = find_last()
 
-with torch.device("meta"):
-    model = deep_danbooru_model.DeepDanbooruModel()
-if model_sd is None:
-    model.load_state_dict(torch.load("deepdanbooru.bin", device, weights_only=False), assign=True, strict=True)
-else:
+if model_sd is not None:
     print(f"Found previous training at epoch {highest_epoch}, resuming...")
-    model.load_state_dict(model_sd, assign=True, strict=True)
-model.to(device, TORCH_DTYPE)
+else:
+    model_sd = "deepdanbooru.bin"
+model = deep_danbooru_model.DeepDanbooruModel.from_single_file(model_sd, device, TORCH_DTYPE)
 
 batch_size = 128
 dataset = DeepDanbooruDataset("/root/anime-collection/images")
